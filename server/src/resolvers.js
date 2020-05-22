@@ -1,4 +1,4 @@
-const { paginateResults } = require('./utils');
+const { paginateResults } = require("./utils");
 
 module.exports = {
   Query: {
@@ -9,7 +9,7 @@ module.exports = {
       const launches = paginateResults({
         after,
         pageSize,
-        results: allLaunches
+        results: allLaunches,
       });
       return {
         launches,
@@ -19,18 +19,18 @@ module.exports = {
         hasMore: launches.length
           ? launches[launches.length - 1].cursor !==
             allLaunches[allLaunches.length - 1].cursor
-          : false
+          : false,
       };
     },
     launch: (_, { id }, { dataSources }) =>
       dataSources.launchAPI.getLaunchById({ launchId: id }),
-     me: async (_, __, { dataSources }) =>
-      dataSources.userAPI.findOrCreateUser(),    
+    me: async (_, __, { dataSources }) =>
+      dataSources.userAPI.findOrCreateUser(),
   },
   Mission: {
     // make sure the default size is 'large' in case user doesn't specify
-    missionPatch: (mission, { size } = { size: 'LARGE' }) => {
-      return size === 'SMALL'
+    missionPatch: (mission, { size } = { size: "LARGE" }) => {
+      return size === "SMALL"
         ? mission.missionPatchSmall
         : mission.missionPatchLarge;
     },
@@ -43,9 +43,9 @@ module.exports = {
     trips: async (_, __, { dataSources }) => {
       // get ids of launches by user
       const launchIds = await dataSources.userAPI.getLaunchIdsByUser();
-  
+
       if (!launchIds.length) return [];
-  
+
       // look up those launches by their ids
       return (
         dataSources.launchAPI.getLaunchesByIds({
@@ -55,42 +55,63 @@ module.exports = {
     },
   },
   Mutation: {
-  bookTrips: async (_, { launchIds }, { dataSources }) => {
-    const results = await dataSources.userAPI.bookTrips({ launchIds });
-    const launches = await dataSources.launchAPI.getLaunchesByIds({
-      launchIds,
-    });
+    bookTrips: async (_, { launchIds, cardToken }, { dataSources }) => {
+      const results = await dataSources.userAPI.bookTrips({ launchIds });
+      const launches = await dataSources.launchAPI.getLaunchesByIds({
+        launchIds,
+      });
+      const stripe = require("stripe")(
+        "sk_test_lEUbR8HHh4uR541WQyr0yGcM00rLoXVVLW"
+      );
 
-    return {
-      success: results && results.length === launchIds.length,
-      message:
-        results.length === launchIds.length
-          ? 'trips booked successfully'
-          : `the following launches couldn't be booked: ${launchIds.filter(
-              id => !results.includes(id),
-            )}`,
-      launches,
-    };
-  },
-  cancelTrip: async (_, { launchId }, { dataSources }) => {
-    const result = await dataSources.userAPI.cancelTrip({ launchId });
+      // Create the PaymentIntent
+      let intent = await stripe.paymentIntents.create({
+        amount: 1000 * launchIds.length + 1,
+        currency: "usd",
+        payment_method: cardToken,
 
-    if (!result)
+        // A PaymentIntent can be confirmed some time after creation,
+        // but here we want to confirm (collect payment) immediately.
+        confirm: true,
+
+        // If the payment requires any follow-up actions from the
+        // customer, like two-factor authentication, Stripe will error
+        // and you will need to prompt them for a new payment method.
+        error_on_requires_action: true,
+      });
+      const paymentStatus = intent.status;
+      console.log(intent);
       return {
-        success: false,
-        message: 'failed to cancel trip',
+        success: results && results.length === launchIds.length,
+        message:
+          results.length === launchIds.length
+            ? "trips booked successfully"
+            : `the following launches couldn't be booked: ${launchIds.filter(
+                (id) => !results.includes(id)
+              )}`,
+        launches,
+        paymentStatus,
       };
+    },
+    cancelTrip: async (_, { launchId }, { dataSources }) => {
+      const result = await dataSources.userAPI.cancelTrip({ launchId });
 
-    const launch = await dataSources.launchAPI.getLaunchById({ launchId });
-    return {
-      success: true,
-      message: 'trip cancelled',
-      launches: [launch],
-    };
+      if (!result)
+        return {
+          success: false,
+          message: "failed to cancel trip",
+        };
+
+      const launch = await dataSources.launchAPI.getLaunchById({ launchId });
+      return {
+        success: true,
+        message: "trip cancelled",
+        launches: [launch],
+      };
+    },
+    login: async (_, { email }, { dataSources }) => {
+      const user = await dataSources.userAPI.findOrCreateUser({ email });
+      if (user) return new Buffer(email).toString("base64");
+    },
   },
-  login: async (_, { email }, { dataSources }) => {
-    const user = await dataSources.userAPI.findOrCreateUser({ email });
-    if (user) return new Buffer(email).toString('base64');
-  },
-},
 };
