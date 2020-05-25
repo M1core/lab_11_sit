@@ -53,7 +53,7 @@ const typeDefs = gql`
   }
 
   type Mutation {
-    bookTrips(launchIds: [ID]!, cardToken: String!): TripUpdateResponse!
+    bookTrips(launchIds: [ID]!): TripUpdateResponse!
     cancelTrip(launchId: ID!): TripUpdateResponse!
     login(email: String): String # login token
   }
@@ -62,7 +62,7 @@ const typeDefs = gql`
     success: Boolean!
     message: String
     launches: [Launch]
-    paymentStatus: String
+    clientSecret: String
   }
 `;
 

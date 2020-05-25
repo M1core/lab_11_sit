@@ -55,7 +55,7 @@ module.exports = {
     },
   },
   Mutation: {
-    bookTrips: async (_, { launchIds, cardToken }, { dataSources }) => {
+    bookTrips: async (_, { launchIds }, { dataSources }) => {
       const results = await dataSources.userAPI.bookTrips({ launchIds });
       const launches = await dataSources.launchAPI.getLaunchesByIds({
         launchIds,
@@ -65,22 +65,15 @@ module.exports = {
       );
 
       // Create the PaymentIntent
-      let intent = await stripe.paymentIntents.create({
+      const paymentIntent = await stripe.paymentIntents.create({
         amount: 1000 * launchIds.length + 1,
         currency: "usd",
-        payment_method: cardToken,
-
-        // A PaymentIntent can be confirmed some time after creation,
-        // but here we want to confirm (collect payment) immediately.
-        confirm: true,
-
-        // If the payment requires any follow-up actions from the
-        // customer, like two-factor authentication, Stripe will error
-        // and you will need to prompt them for a new payment method.
-        error_on_requires_action: true,
+        // Verify your integration in this guide by including this parameter
+        metadata: { integration_check: "accept_a_payment" },
       });
-      const paymentStatus = intent.status;
-      console.log(intent);
+
+      const clientSecret = paymentIntent.client_secret;
+      console.log(paymentIntent);
       return {
         success: results && results.length === launchIds.length,
         message:
@@ -90,7 +83,7 @@ module.exports = {
                 (id) => !results.includes(id)
               )}`,
         launches,
-        paymentStatus,
+        clientSecret,
       };
     },
     cancelTrip: async (_, { launchId }, { dataSources }) => {
